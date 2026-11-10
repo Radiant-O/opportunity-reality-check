@@ -2,6 +2,11 @@
 
 **Know what a job listing actually says about location, remote work and visa sponsorship before you spend hours applying.**
 
+**Live demo:** https://opportunity-reality-check.opportunity-reality-check-frontend.workers.dev  
+**API:** https://opportunity-reality-check.onrender.com/health · independent demo, not affiliated with a16z speedrun
+
+![Analysis of a live speedrun listing](docs/demo/analysis-live.png)
+
 Opportunity Reality Check is a small decision-support tool over **real job listings from the [a16z speedrun talent network](https://speedrun-talent-network.com/jobs) public API**. A candidate enters their situation (country, preferred work arrangement, openness to relocation, need for sponsorship). They pick a live listing and get an evidence-backed report:
 
 - **What the listing explicitly states**, each statement quoted from the listing
@@ -182,15 +187,19 @@ The frontend is a static site and the backend a single small container. No datab
 2. In Render, choose **New → Blueprint** and select the repo. `render.yaml` builds `backend/Dockerfile`.
 3. Optionally add `ANTHROPIC_API_KEY` as a secret. Reviewers never need one.
 
-**Frontend: Cloudflare Pages**
+**Frontend: Cloudflare Workers (static assets)**
 
 ```bash
 cd frontend
-VITE_API_BASE_URL=https://<your-render-service>.onrender.com npm run build
-npx wrangler pages deploy dist --project-name opportunity-reality-check
+VITE_API_BASE_URL=https://opportunity-reality-check.onrender.com npm run build
+npx wrangler deploy   # uses frontend/wrangler.jsonc, serves ./dist as an SPA
 ```
 
-`*.opportunity-reality-check.pages.dev` is already allowed by the backend's CORS configuration. Any static host and any container host work equally well.
+The backend only accepts browser requests from origins listed in `CORS_ORIGINS` (exact matches, set in `render.yaml`). If you deploy the frontend somewhere else, add that origin there.
+
+**Keeping the free backend awake**
+
+Render's free plan sleeps after 15 idle minutes, and the next request then takes about 50 seconds. A free UptimeRobot HTTP(s) monitor on `https://opportunity-reality-check.onrender.com/health` every 5 minutes keeps it awake. `/health` answers both `GET` and `HEAD`.
 
 ## Limitations
 

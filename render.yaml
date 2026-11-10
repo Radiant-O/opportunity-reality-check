@@ -12,7 +12,7 @@ services:
     autoDeploy: true
     envVars:
       - key: CORS_ORIGINS
-        value: https://opportunity-reality-check.pages.dev,http://localhost:5173
+        value: https://opportunity-reality-check.opportunity-reality-check-frontend.workers.dev,http://localhost:5173
       - key: TRUST_X_FORWARDED_FOR
         value: "true"
       - key: LLM_ENABLED
