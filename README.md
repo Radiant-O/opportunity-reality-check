@@ -1,9 +1,14 @@
 # Opportunity Reality Check
 
+[![CI](https://github.com/Radiant-O/opportunity-reality-check/actions/workflows/ci.yml/badge.svg)](https://github.com/Radiant-O/opportunity-reality-check/actions/workflows/ci.yml)
+
 **Know what a job listing actually says about location, remote work and visa sponsorship before you spend hours applying.**
 
-**Live demo:** https://reality-check.radiantx.workers.dev  
-**API:** https://opportunity-reality-check.onrender.com/health · independent demo, not affiliated with a16z speedrun
+| | |
+|---|---|
+| **Live demo** | **https://reality-check.radiantx.workers.dev** |
+| **API** | https://opportunity-reality-check.onrender.com/health (interactive docs at [`/docs`](https://opportunity-reality-check.onrender.com/docs)) |
+| **Demo video** | [`docs/demo/walkthrough.webm`](docs/demo/walkthrough.webm) |
 
 ![Analysis of a live speedrun listing](docs/demo/analysis-live.png)
 
@@ -18,9 +23,19 @@ A second, founder-facing panel, **Listing Clarity Check**, shows which candidate
 
 > Independent demo, not affiliated with a16z or speedrun. Informational only, not legal or immigration advice.
 
-![Analysis of a live speedrun listing](docs/demo/analysis-live.png)
+**Demo recording:** [`docs/demo/walkthrough.webm`](docs/demo/walkthrough.webm) is a short silent screen recording of the running app against the live API. It covers entering preferences, analysing a listing that states sponsorship, a remote listing with unstated countries, and the Listing Clarity Check.
 
-**Demo recording:** [`docs/demo/walkthrough.webm`](docs/demo/walkthrough.webm) (short silent screen recording of the running app against the live API). It covers entering preferences, analysing a listing that states sponsorship, a remote listing with unstated countries, and the Listing Clarity Check.
+<p align="center"><img src="docs/demo/mobile.png" alt="Mobile layout" width="280"></p>
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 18, TypeScript, Vite 6, Tailwind CSS 4, Vitest + Testing Library |
+| Backend | Python 3.12, FastAPI, Pydantic v2, httpx, pytest, ruff |
+| AI (optional) | Anthropic Claude via structured outputs, behind a quote-verifying validator |
+| Hosting | Cloudflare Workers static assets (frontend), Render free web service in Docker (backend), UptimeRobot keep-alive |
+| CI | GitHub Actions: lint, type-check, tests, extraction evals, build |
 
 ---
 
@@ -149,7 +164,7 @@ I verified the integration against the published OpenAPI spec (v1.4.0, snapshot 
 ## Testing
 
 ```bash
-cd backend && pytest -q                 # 162 tests, all external calls mocked
+cd backend && pytest -q                 # 163 tests, all external calls mocked
 cd backend && python -m evals.run_evals  # extraction eval set, per-category precision/recall
 cd backend && pytest -m live            # optional: real speedrun API
 cd frontend && npm test                 # 36 Vitest + Testing Library tests
@@ -180,12 +195,22 @@ CI (`.github/workflows/ci.yml`) runs ruff, pytest, the eval set, the frontend ty
 
 ## Deployment
 
-The frontend is a static site and the backend a single small container. No database or Redis.
+The frontend is a static site and the backend is a single small container, with no database or Redis. The live demo runs entirely on free tiers.
 
-**Backend: Render (free) via Blueprint**
-1. Push this repo to GitHub.
-2. In Render, choose **New → Blueprint** and select the repo. `render.yaml` builds `backend/Dockerfile`.
-3. Optionally add `ANTHROPIC_API_KEY` as a secret. Reviewers never need one.
+```mermaid
+flowchart LR
+  U[Browser] --> F[Cloudflare Workers<br/>static assets<br/>reality-check.radiantx.workers.dev]
+  U -->|CORS-restricted API calls| B[Render free web service<br/>Docker, FastAPI]
+  M[UptimeRobot<br/>HEAD /health every 5 min] --> B
+  B --> S[(speedrun public API)]
+```
+
+**Backend: Render (free web service, Docker)**
+1. In Render, choose **New → Blueprint** and select this repo (`render.yaml` builds `backend/Dockerfile`). Alternatively, create a **Web Service** with runtime Docker, root directory `backend` and health check `/health`.
+2. Set `CORS_ORIGINS` to the frontend origin(s) and `TRUST_X_FORWARDED_FOR=true`.
+3. Optionally add `ANTHROPIC_API_KEY` as a secret. The demo runs without one.
+
+Pushes to `main` redeploy the backend automatically.
 
 **Frontend: Cloudflare Workers (static assets)**
 
@@ -195,11 +220,11 @@ VITE_API_BASE_URL=https://opportunity-reality-check.onrender.com npm run build
 npx wrangler deploy   # uses frontend/wrangler.jsonc, serves ./dist as an SPA
 ```
 
-The backend only accepts browser requests from origins listed in `CORS_ORIGINS` (exact matches, set in `render.yaml`). If you deploy the frontend somewhere else, add that origin there.
+The backend only accepts browser requests from origins listed in `CORS_ORIGINS`, which must match exactly. If you deploy the frontend somewhere else, add that origin there.
 
 **Keeping the free backend awake**
 
-Render's free plan sleeps after 15 idle minutes, and the next request then takes about 50 seconds. A free UptimeRobot HTTP(s) monitor on `https://opportunity-reality-check.onrender.com/health` every 5 minutes keeps it awake. `/health` answers both `GET` and `HEAD`.
+Render's free plan sleeps after 15 idle minutes, and the next request then takes about 50 seconds. A free UptimeRobot HTTP(s) monitor on `/health` every 5 minutes keeps it awake, and `/health` answers both `GET` and `HEAD`. If the backend does fall asleep, the frontend shows a "waking up" hint instead of failing silently.
 
 ## Limitations
 
