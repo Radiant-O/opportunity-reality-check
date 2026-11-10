@@ -1,0 +1,19 @@
+# Render Blueprint: backend API on Render's free plan.
+# New > Blueprint > select this repo. Set ANTHROPIC_API_KEY in the dashboard
+# only if you want LLM extraction (the app works fully without it).
+services:
+  - type: web
+    name: opportunity-reality-check-api
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: CORS_ORIGINS
+        value: https://opportunity-reality-check.pages.dev,http://localhost:5173
+      - key: LLM_ENABLED
+        value: "true"
+      - key: ANTHROPIC_API_KEY
+        sync: false
