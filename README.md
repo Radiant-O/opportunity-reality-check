@@ -2,7 +2,7 @@
 
 **Know what a job listing actually says about location, remote work and visa sponsorship before you spend hours applying.**
 
-**Live demo:** https://opportunity-reality-check.opportunity-reality-check-frontend.workers.dev  
+**Live demo:** https://reality-check.radiantx.workers.dev  
 **API:** https://opportunity-reality-check.onrender.com/health · independent demo, not affiliated with a16z speedrun
 
 ![Analysis of a live speedrun listing](docs/demo/analysis-live.png)
