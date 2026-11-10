@@ -22,3 +22,6 @@ Thumbs.db
 
 # Deploy tooling
 .wrangler/
+
+# Vite dependency cache
+.vite/
