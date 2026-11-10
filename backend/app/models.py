@@ -168,6 +168,10 @@ class ExtractionReport(BaseModel):
     rejected_claims: list[Claim] = Field(default_factory=list)
     unknown_categories: list[ClaimCategory] = Field(default_factory=list)
     llm_status: Literal["disabled", "ok", "failed", "skipped"] = "disabled"
+    injection_detected: bool = Field(
+        default=False,
+        description="The listing contains text addressed to AI tools; AI-extracted claims were discarded.",
+    )
     description_chars: int = 0
     description_truncated: bool = False
 

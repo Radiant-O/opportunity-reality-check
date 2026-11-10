@@ -13,4 +13,4 @@ USER appuser
 ENV PORT=8000
 EXPOSE 8000
 # Hosts like Render/Fly/Railway inject $PORT.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*'"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --no-access-log"]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .extraction.llm import LLMExtractor
 from .extraction.pipeline import run_extraction
-from .models import AnalysisResponse, CandidatePreferences, JobDetail
+from .models import AnalysisResponse, CandidatePreferences, ExtractionReport, JobDetail
 from .recommend import build_assessment, build_draft_inquiry, build_next_steps
 from .rules import evaluate_authorization, evaluate_location, evaluate_technical
 
@@ -16,8 +16,15 @@ DISCLAIMER = (
 )
 
 
-async def analyze(job: JobDetail, prefs: CandidatePreferences, llm: LLMExtractor | None) -> AnalysisResponse:
-    report = await run_extraction(job, llm)
+async def analyze(
+    job: JobDetail,
+    prefs: CandidatePreferences,
+    llm: LLMExtractor | None,
+    report: ExtractionReport | None = None,
+) -> AnalysisResponse:
+    """Extraction is preference-independent, so callers may pass a cached report."""
+    if report is None:
+        report = await run_extraction(job, llm)
     claims = report.claims
     location = evaluate_location(prefs, job, claims)
     authorization = evaluate_authorization(prefs, job, claims)

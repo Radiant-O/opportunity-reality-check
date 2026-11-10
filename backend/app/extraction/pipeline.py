@@ -45,7 +45,7 @@ async def run_extraction(job: JobDetail, llm: LLMExtractor | None) -> Extraction
         llm_claims, llm_status = await llm.extract(job)
         candidates.extend(llm_claims)
 
-    verified, rejected = validate_claims(candidates, job)
+    verified, rejected, injection = validate_claims(candidates, job)
     merged = _merge(verified)
     present = {c.category for c in merged}
     unknown = [cat for cat in REPORTABLE if cat not in present]
@@ -55,6 +55,7 @@ async def run_extraction(job: JobDetail, llm: LLMExtractor | None) -> Extraction
         rejected_claims=rejected,
         unknown_categories=unknown,
         llm_status=llm_status,  # type: ignore[arg-type]
+        injection_detected=injection,
         description_chars=len(desc),
         description_truncated=len(desc) >= 15000,
     )

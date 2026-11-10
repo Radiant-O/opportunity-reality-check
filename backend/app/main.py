@@ -25,6 +25,7 @@ from .models import (
     AnalyzeRequest,
     ClarityRequest,
     ClarityResponse,
+    ExtractionReport,
     JobDetail,
     JobListResponse,
     JobSummary,
@@ -50,6 +51,8 @@ def _configure_logging(level: str) -> None:
     root = logging.getLogger()
     root.handlers = [handler]
     root.setLevel(level)
+    # uvicorn's access log records client IPs and query strings; keep it off.
+    logging.getLogger("uvicorn.access").disabled = True
 
 
 def create_app(
@@ -75,6 +78,9 @@ def create_app(
     app.state.speedrun = speedrun or SpeedrunClient(settings)
     app.state.llm = llm if llm is not None else LLMExtractor(settings)
     app.state.analysis_cache = TTLCache[AnalysisResponse](settings.analysis_cache_ttl_s, settings.cache_max_entries)
+    # Extraction (the only step that may call the LLM) doesn't depend on
+    # preferences, so it is cached per job: varying preferences can't drive spend.
+    app.state.extraction_cache = TTLCache[ExtractionReport](settings.analysis_cache_ttl_s, settings.cache_max_entries)
     app.state.limiter_jobs = RateLimiter(settings.rate_limit_jobs_per_min, 60)
     app.state.limiter_analyze = RateLimiter(settings.rate_limit_analyze_per_min, 60)
 
@@ -114,8 +120,13 @@ def create_app(
         return JSONResponse(status_code=422, content={"detail": str(exc)})
 
     def _client_key(request: Request) -> str:
-        fwd = request.headers.get("x-forwarded-for", "")
-        ip = fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "unknown")
+        # X-Forwarded-For is client-controlled unless a trusted proxy sets it.
+        # Only when configured, use the right-most hop (appended by our proxy).
+        ip = request.client.host if request.client else "unknown"
+        if settings.trust_x_forwarded_for:
+            hops = [h.strip() for h in request.headers.get("x-forwarded-for", "").split(",") if h.strip()]
+            if hops:
+                ip = hops[-1]
         return hashlib.sha256(ip.encode()).hexdigest()[:16]
 
     def _limit(limiter: RateLimiter, request: Request) -> None:
@@ -155,7 +166,11 @@ def create_app(
         cached = app.state.analysis_cache.get(key)
         if cached is not None:
             return cached
-        result = await analyze(job, body.preferences, app.state.llm)
+        report = app.state.extraction_cache.get(job.id)
+        if report is None:
+            report = await run_extraction(job, app.state.llm)
+            app.state.extraction_cache.set(job.id, report)
+        result = await analyze(job, body.preferences, app.state.llm, report=report)
         app.state.analysis_cache.set(key, result)
         log.info("analysis", extra={"event": "analysis_complete", "status": result.extraction.llm_status})
         return result

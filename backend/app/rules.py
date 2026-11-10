@@ -77,7 +77,15 @@ def evaluate_location(prefs: CandidatePreferences, job: JobDetail, claims: list[
     loc_claims = _by_cat(claims, ClaimCategory.job_location)
     loc_ids = [c.id for c in loc_claims]
     job_country = infer_country(job.location)
-    cand_country = canonical_country(prefs.country) or (prefs.country or None)
+    # Only recognised countries are compared; free text we can't map is reported as unknown.
+    cand_country = canonical_country(prefs.country)
+    unrecognised_country = bool(prefs.country) and cand_country is None
+    if unrecognised_country:
+        findings.append(Finding(
+            rule_id="L2_COUNTRY_UNRECOGNISED", status="unknown",
+            title=f"We couldn't match \"{prefs.country}\" to a country",
+            explanation="Location comparisons are skipped rather than guessed. Try the country's English name.",
+        ))
     geo = _by_cat(claims, ClaimCategory.geographic_restriction)
     region_claims = [c for c in geo if not c.value.startswith("Time zone")]
     tz_claims = [c for c in geo if c.value.startswith("Time zone")]
@@ -141,6 +149,8 @@ def evaluate_location(prefs: CandidatePreferences, job: JobDetail, claims: list[
                 title="Office location not listed",
                 explanation="The role needs office attendance, but the listing doesn't say where.",
             ))
+        elif unrecognised_country:
+            pass  # already reported as L2_COUNTRY_UNRECOGNISED
         elif not cand_country:
             findings.append(Finding(
                 rule_id="L2_COUNTRY_MISSING", status="unknown",
@@ -354,10 +364,20 @@ def evaluate_authorization(prefs: CandidatePreferences, job: JobDetail, claims: 
         ))
     elif "not_offered" in values or "citizenship_required" in values:
         label = "explicitly_restricted"
-        kind = "requires citizenship or clearance" if "citizenship_required" in values and "not_offered" not in values else "states sponsorship is not available"
+        citizenship = "citizenship_required" in values
+        kind = "requires citizenship or a security clearance" if citizenship and "not_offered" not in values else "states sponsorship is not available"
         headline = f"The listing {kind}."
         ev = ids("not_offered", "citizenship_required")
-        if need == "yes":
+        if citizenship and need != "yes":
+            # Not needing sponsorship (e.g. green card / work permit holders) does
+            # not satisfy a citizenship or clearance requirement.
+            findings.append(Finding(
+                rule_id="A1_CITIZENSHIP_REQUIREMENT", status="caution",
+                title="Citizenship or clearance requirement",
+                explanation="The listing requires citizenship or a security clearance. Not needing sponsorship isn't enough. Check that you meet this specific requirement.",
+                evidence_claim_ids=ids("citizenship_required"),
+            ))
+        elif need == "yes":
             findings.append(Finding(
                 rule_id="A1_PUBLISHED_RESTRICTION", status="conflict",
                 title="Published sponsorship restriction",
@@ -412,7 +432,7 @@ def evaluate_authorization(prefs: CandidatePreferences, job: JobDetail, claims: 
                 "The listing asks candidates to be authorized to work already. It doesn't explicitly rule out "
                 "sponsorship, so confirm before applying if you'd need it."
                 if need != "no"
-                else "The listing asks for existing work authorization, which you said you have."
+                else "The listing asks for existing work authorization. If you're already authorized to work where the role is based, this isn't an obstacle."
             ),
             evidence_claim_ids=ids("existing_authorization_required"),
         ))

@@ -11,6 +11,8 @@ from urllib.parse import urlsplit, urlunsplit
 
 from .models import JobDetail, JobSummary
 
+SPEEDRUN_HOST = "speedrun-talent-network.com"
+
 _WORKPLACE_MAP = {
     "onsite": "onsite",
     "on-site": "onsite",
@@ -49,7 +51,7 @@ def _clean_url(v: Any) -> str | None:
     if not s:
         return None
     parts = urlsplit(s)
-    if parts.scheme != "https" or not parts.netloc:
+    if parts.scheme != "https" or parts.netloc.lower() != SPEEDRUN_HOST:
         return None
     return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 

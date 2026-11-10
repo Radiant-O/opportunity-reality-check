@@ -13,6 +13,8 @@ services:
     envVars:
       - key: CORS_ORIGINS
         value: https://opportunity-reality-check.pages.dev,http://localhost:5173
+      - key: TRUST_X_FORWARDED_FOR
+        value: "true"
       - key: LLM_ENABLED
         value: "true"
       - key: ANTHROPIC_API_KEY

@@ -45,16 +45,16 @@ flowchart LR
 
 1. **Deterministic first.** A regex/keyword extractor runs on every listing and quotes exact sentences. It is precise, free, instant and reproducible. On real speedrun listings it finds statements like *"We're happy to sponsor international candidates (e.g., STEM OPT, OPT, H1B, O1, E3)"*, *"works in person 4–5 days per week in San Francisco"* and *"Live between GMT-8 and GMT-5"*. It ignores perks like *"Company Sponsored Conferences"*.
 2. **The LLM proposes; the validator and rules decide.** If `ANTHROPIC_API_KEY` is set, Claude extracts additional claims with structured output. **Every** claim, from either extractor, must pass validation:
-   - its quote must appear in the listing (whitespace and quote-character normalized)
-   - it must not look like an instruction to an AI
-   - it must be on-topic for its category
-   - its value must not contradict what the deterministic classifier reads from the same quote
-   - its value must be canonical
+   - Its quote must appear in the listing (whitespace and quote-character normalized).
+   - All semantic checks run on the **full sentence** around the quote. That way, quoting "eligible for visa sponsorship" out of "This role is *not* eligible for visa sponsorship" can't flip its meaning.
+   - For sponsorship, relocation and work arrangement, the deterministic reading of that sentence must agree with the claimed value. A favourable value is never accepted from a sentence containing a negation.
+   - Regions must name a place mentioned in the sentence, skills must appear in the quote, and values must be canonical.
+   - If the listing contains text addressed to AI or automated tools anywhere, every LLM claim from it is discarded. Favourable claims next to that text are distrusted too, and the user is told.
 
    Failed claims are shown to the user as "discarded" with a reason. Confidence scores are displayed as text with the caveat "confidence is not proof".
 3. **Rules, not scores.** No single eligibility percentage. Each finding has a rule id (`docs/RULES.md`), a status, and links to the claims that support it.
 4. **Unknown ≠ No.** "Not specified" and "Explicitly restricted" are visually and semantically distinct everywhere.
-5. **Privacy by default.** No accounts, and no storage of preferences anywhere except React state. Logs contain only method, path, status and timing (a test asserts that preferences never reach logs). Client IPs are hashed in memory only for rate limiting.
+5. **Privacy by default.** No accounts, and no storage of preferences anywhere except React state. Logs contain only method, path, status and timing (a test asserts that preferences never reach logs). Uvicorn's access log, which would record IPs and query strings, is disabled. Client IPs are hashed in memory only for rate limiting.
 
 ## Repository layout
 
@@ -105,6 +105,7 @@ No credentials are required. The speedrun API is public, and LLM extraction is o
 | `LLM_DAILY_CALL_CAP` | `300` | Hard cap on LLM calls per day (cost guard) |
 | `LLM_MAX_INPUT_CHARS` | `12000` | Listing text sent to the model is truncated to this |
 | `RATE_LIMIT_ANALYZE_PER_MIN` | `12` | Per-client limit for `/api/analyze` and `/api/listing-clarity` |
+| `TRUST_X_FORWARDED_FOR` | `false` | Use the right-most `X-Forwarded-For` hop as the client IP. Enable only behind a proxy that appends it. |
 | `CORS_ORIGINS` | localhost | Comma-separated allowed origins |
 | `SPEEDRUN_SOURCE` | `opportunity-reality-check` | Attribution tag sent as `?source=` |
 
@@ -125,7 +126,8 @@ Interactive docs at `/docs` when the server is running.
 - The backend talks to exactly one fixed host. Job ids are validated against a strict pattern, so the service can't be used to fetch arbitrary URLs.
 - Request bodies forbid unknown fields; skills are capped at 20 and pasted text at 15k characters.
 - Upstream calls have timeouts and bounded retries: two retries on 5xx and timeouts, none on 429.
-- Per-client rate limits apply, analysis results are cached, and the LLM path has an input cap, a concurrency cap and a daily cap.
+- Per-client rate limits apply, and a spoofed `X-Forwarded-For` is ignored unless a trusted proxy is configured.
+- Extraction (the only step that can call the LLM) is cached **per job**, so changing preferences never triggers new model calls. The LLM path also has an input cap, a concurrency cap and a daily cap.
 
 ## speedrun API integration
 
@@ -142,10 +144,10 @@ I verified the integration against the published OpenAPI spec (v1.4.0, snapshot 
 ## Testing
 
 ```bash
-cd backend && pytest -q                 # 109 tests, all external calls mocked
+cd backend && pytest -q                 # 162 tests, all external calls mocked
 cd backend && python -m evals.run_evals  # extraction eval set, per-category precision/recall
 cd backend && pytest -m live            # optional: real speedrun API
-cd frontend && npm test                 # 34 Vitest + Testing Library tests
+cd frontend && npm test                 # 36 Vitest + Testing Library tests
 ```
 
 The backend tests cover:
@@ -156,10 +158,18 @@ The backend tests cover:
 - fabricated quotes, unsupported high-confidence claims, and prompt injection inside a listing, both against the validator and through a mocked LLM that obeys the injection
 - LLM failure, refusal and daily-cap fallbacks
 - determinism of the rules, rate limiting, and the absence of preferences from logs
+- `tests/test_review_regressions.py`: every issue from an adversarial review of the backend, reproduced and pinned. Examples:
+  - partial quotes that drop a negation
+  - injection addressed to "automated screening tools"
+  - "we no longer sponsor visas"
+  - "relocation assistance is not available"
+  - conference sponsorship and "visa-free" perks
+  - unknown countries being treated as conflicts
+  - spoofed `X-Forwarded-For`
 
 The frontend tests cover loading, empty, error and success states, preference inputs, evidence lookup, copy-to-clipboard, and the clarity check.
 
-**Evaluation set** (`backend/evals/cases.json`): 16 labelled listings across explicit restrictions, explicit support, silence, perk false-positives, remote-with-region, time-zone-only remote, label/description conflicts, compound "hybrid" titles, citizenship requirements, case-by-case sponsorship, prompt injection, and salary/size traps. Each case states why it exists. The deterministic extractor currently scores 1.0 precision and recall on it, with zero unsupported claims. **Caveat:** these cases were written by the same author as the rules, so they are a regression gate, not an unbiased accuracy estimate. A fair estimate needs listings labelled by someone else (see the case study).
+**Evaluation set** (`backend/evals/cases.json`): 20 labelled listings across explicit restrictions, explicit support, silence, perk false-positives, negation traps, partial sponsorship, remote-with-region, time-zone-only remote, label/description conflicts, compound "hybrid" titles, citizenship requirements, case-by-case sponsorship, prompt injection, and salary/size traps. Each case states why it exists. The deterministic extractor currently scores 1.0 precision and recall on it, with zero unsupported claims. **Caveat:** these cases were written by the same author as the rules, so they are a regression gate, not an unbiased accuracy estimate. A fair estimate needs listings labelled by someone else (see the case study).
 
 CI (`.github/workflows/ci.yml`) runs ruff, pytest, the eval set, the frontend type-check, the tests and the build. The live-API job runs too but never blocks.
 
@@ -188,6 +198,7 @@ npx wrangler pages deploy dist --project-name opportunity-reality-check
 - Country inference uses a small gazetteer. Ambiguous or multi-country locations become "unknown" rather than a guess.
 - Whether a remote role abroad needs a visa depends on employment models that listings rarely state. The tool flags this rather than resolving it.
 - In-memory caching and rate limiting assume a single instance. That's fine for a demo; use shared storage before scaling out.
+- After deploying behind a proxy, confirm that the right-most `X-Forwarded-For` hop is the real client. If it is a proxy address, all users share one rate-limit bucket.
 - Dev-only advisories: `npm audit` flags the Vitest 3 test runner (dev dependency, never shipped). `npm audit --omit=dev` is clean. Upgrading to Vitest 4 is blocked by an npm 10 resolver bug at the time of writing.
 
 ## Deviations from the original spec

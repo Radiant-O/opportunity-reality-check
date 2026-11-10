@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     # Rate limiting (per client IP, per minute)
     rate_limit_jobs_per_min: int = 60
     rate_limit_analyze_per_min: int = 12
+    # Set true only behind a proxy that appends the client IP (e.g. Render).
+    trust_x_forwarded_for: bool = False
 
     # Optional LLM extraction (Anthropic). Disabled when no key is set.
     anthropic_api_key: str | None = None

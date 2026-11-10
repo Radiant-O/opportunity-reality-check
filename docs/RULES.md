@@ -20,6 +20,7 @@ If the description states an arrangement, the most restrictive one wins (onsite 
 | `L1_ARRANGEMENT_DIFFERENT` | caution | Other mismatches (e.g. candidate wants onsite and the role is remote) |
 | `L2_LOCATION_UNKNOWN` | unknown | Onsite or hybrid role with no location |
 | `L2_COUNTRY_MISSING` | unknown | Candidate didn't give a country |
+| `L2_COUNTRY_UNRECOGNISED` | unknown | Candidate's country text doesn't map to a known country. Comparisons are skipped, never treated as conflicts. |
 | `L2_JOB_COUNTRY_UNKNOWN` | unknown | We can't map the location to one country |
 | `L2_SAME_COUNTRY` | agreement | Office is in the candidate's country |
 | `L2_RELOCATION_CONFLICT` | conflict | Office abroad and the candidate won't relocate |
@@ -54,6 +55,7 @@ The section label reflects **only the listing**:
 The candidate's answer then determines the finding status:
 
 - `A1_PUBLISHED_RESTRICTION` is a **conflict** only when the candidate says they need sponsorship. It is a caution if they're unsure and an agreement if they don't need it.
+- `A1_CITIZENSHIP_REQUIREMENT` is always at least a **caution** for citizenship or clearance requirements. Not needing sponsorship (e.g. holding a green card) doesn't satisfy "must be a U.S. citizen".
 - `A5_NOT_SPECIFIED` is **unknown**, never treated as a no.
 - `A6_REMOTE_INTERNATIONAL` is a caution on remote roles: whether remote work abroad needs a visa depends on the employment model, which listings rarely state.
 

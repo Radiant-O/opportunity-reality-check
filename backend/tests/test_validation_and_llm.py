@@ -59,7 +59,7 @@ def test_polarity_contradiction_is_rejected():
     job = make_job(description_text="We are unable to sponsor visas for this role.")
     out = validate_claim(claim(evidence_text="We are unable to sponsor visas for this role."), job)
     assert out.verification_status == "rejected"
-    assert "contradicts" in (out.rejection_reason or "")
+    assert "reads as not_offered" in (out.rejection_reason or "")
 
 
 def test_non_canonical_value_is_rejected():

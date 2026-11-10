@@ -114,6 +114,8 @@ export interface ExtractionReport {
   rejected_claims?: Claim[];
   unknown_categories?: ClaimCategory[];
   llm_status?: LlmStatus;
+  /** Listing contains text addressed to AI tools; AI-extracted claims were discarded. */
+  injection_detected?: boolean;
   description_chars?: number;
   description_truncated?: boolean;
 }

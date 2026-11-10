@@ -69,6 +69,12 @@ export function EvidenceList({ extraction }: EvidenceListProps) {
         {LLM_STATUS_TEXT[extraction.llm_status ?? "disabled"]}
         {extraction.description_truncated ? " · long description truncated before analysis" : ""}
       </p>
+      {extraction.injection_detected && (
+        <p role="note" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+          This listing contains text addressed to AI tools. We ignored it: any AI-extracted claims were discarded,
+          and only plainly stated, quoted requirements are shown.
+        </p>
+      )}
 
       {categories.length > 0 ? (
         <div className="space-y-4">

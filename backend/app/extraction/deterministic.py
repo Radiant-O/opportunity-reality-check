@@ -74,28 +74,51 @@ def _clip(seg: str, match: re.Match[str], limit: int = 420) -> str:
 
 _I = re.IGNORECASE
 
-IMMIGRATION_CONTEXT = re.compile(
-    r"\b(visas?|immigration|h-?1b|o-?1|tn visa|green card|work (?:authori[sz]ation|permit)|"
-    r"international candidates?|employment authori[sz]ation|right to work|sponsorship)\b",
+# Immigration terms. "visa-free" is travel, not immigration; bare "sponsorship"
+# is NOT immigration context on its own ("conference sponsorship").
+IMMIGRATION_TERM = re.compile(
+    r"\b(?:visas?(?![-\s]free)|immigration|h-?1b|o-?1|e-?3|tn visa|green cards?|opt|stem opt|cpt|"
+    r"work (?:authori[sz]ation|permits?)|employment authori[sz]ation|right to work|authori[sz]ed to work|"
+    r"current or future sponsorship|employer sponsorship)\b|"
+    # "Sponsorship ..." as the subject of a sentence in a job listing means visa sponsorship.
+    r"^\W*sponsorship\b",
+    _I,
+)
+# Label-style lines where bare "sponsorship" clearly means visa sponsorship.
+SPONSOR_LABEL = re.compile(r"^\W*(?:visa |immigration )?sponsorship\s*[:\-–]\s*(yes|no|available|not available|unavailable)\b", _I)
+
+# Clause-level negation (applies only within the clause mentioning sponsorship).
+NEGATION = re.compile(
+    r"\b(?:not|never|no longer|unable|cannot|ceased|stopped|unavailable|won't|without)\b|n't\b|"
+    r"\bno (?:visa |immigration |h-?1b )?sponsorship\b|\bwill not be considered\b",
+    _I,
+)
+# Hedges like "we cannot guarantee your visa" are not refusals.
+HEDGE = re.compile(
+    r"\b(?:cannot|can ?not|can't|do not|don't|does not|doesn't|not able to|unable to|won't)\s+(?:always\s+)?"
+    r"(?:guarantee|promise|ensure)\w*|\bno guarantees?\b|\bnot guaranteed\b|\bisn't guaranteed\b",
     _I,
 )
 
+
+def has_negation(text: str) -> bool:
+    return bool(NEGATION.search(HEDGE.sub(" ", text)))
+
+
+CLAUSE_SPLIT = re.compile(r"\s*(?:;|,\s*(?:but|however|though|although|except)\b|\bbut\b|\bhowever\b|\bexcept\b)\s*", _I)
+SPONSOR_WORD = re.compile(r"\bsponsor\w*\b", _I)
+
 SPONSOR_NEG = [
-    re.compile(
-        r"\b(?:unable|not able|cannot|can ?not|can't|won't|will not|do not|don't|does not|"
-        r"doesn't|are not|is not|aren't|isn't)\b[^.;]{0,40}?\b(?:to )?"
-        r"(?:sponsor|provide|offer|support)\w*\b[^.;]{0,40}?"
-        r"\b(?:visas?|sponsorship|immigration|work authori[sz]ation|h-?1b)\b",
-        _I,
-    ),
+    re.compile(r"\b(?:unable|not able|cannot|can ?not|can't|won't|will not|do not|don't|does not|doesn't|"
+               r"are not|is not|aren't|isn't|no longer|never)\b[^.;]{0,40}?\bsponsor", _I),
     re.compile(r"\bno (?:visa |immigration |h-?1b )?sponsorship\b", _I),
-    re.compile(r"\b(?:visa )?sponsorship (?:is )?(?:not|un)(?: )?(?:available|offered|provided|possible)\b", _I),
-    re.compile(
-        r"\bwithout (?:the need for |requiring |needing )?(?:current or future |future |any )?"
-        r"(?:visa |employer |immigration )?sponsorship\b",
-        _I,
-    ),
-    re.compile(r"\bnot (?:currently )?(?:able to )?sponsor(?:ing)?\b", _I),
+    re.compile(r"\bsponsorship[^.;]{0,20}\b(?:not|un)\s?(?:available|offered|provided|possible)\b", _I),
+    re.compile(r"\bsponsorship (?:is|isn't|is not)\s*(?:n't )?(?:available|offered)\b(?=[^.;]*\bn't\b)", _I),
+    re.compile(r"\bwithout (?:the need for |requiring |needing )?(?:current or future |future |any )?"
+               r"(?:visa |employer |immigration )?sponsorship\b", _I),
+    re.compile(r"\bnot eligible for (?:visa |immigration )?sponsorship\b", _I),
+    re.compile(r"\b(?:require|need)s? (?:visa |immigration |employer )?sponsorship\b[^.;]{0,40}\b(?:will not|won't|cannot|can't) be considered\b", _I),
+    re.compile(r"\bstopped sponsoring\b|\bceased sponsoring\b", _I),
 ]
 
 SPONSOR_CASE = [
@@ -107,35 +130,38 @@ SPONSOR_CASE = [
 
 SPONSOR_POS = [
     re.compile(r"\b(?:happy|glad|able|willing|open|excited) to sponsor\b", _I),
-    re.compile(r"\b(?:we|company) (?:will |can |do |does )?sponsor\w*\b[^.;]{0,30}\b(?:visas?|international|candidates|h-?1b|o-?1)\b", _I),
+    re.compile(r"\b(?:we|company) (?:will |can |do |does )?sponsors?\b[^.;]{0,30}\b(?:visas?|international|candidates|h-?1b|o-?1)\b", _I),
     re.compile(r"\b(?:visa|immigration|h-?1b|o-?1) sponsorship (?:is )?(?:available|offered|provided|supported)\b", _I),
     re.compile(r"\b(?:offer|provide|support)s? (?:full )?(?:visa|immigration|h-?1b|o-?1) (?:sponsorship|support|assistance)\b", _I),
-    re.compile(r"\bsponsorship (?:is )?available\b", _I),
     re.compile(r"\bwork hard to get you a visa\b", _I),
-    re.compile(r"\bsponsor(?:ing)? (?:visas?|international candidates|h-?1b|o-?1)\b", _I),
+    re.compile(r"\b(?:been )?successful(?:ly)? (?:in )?sponsor\w*", _I),
+    re.compile(r"\bsponsor(?:ing|s)? (?:visas?|international candidates|h-?1b|o-?1)\b", _I),
 ]
 
 CITIZENSHIP = re.compile(
     r"\b(?:must be|requires?|required to be|only open to|limited to)\b[^.;]{0,30}?"
-    r"\b(?:(?:a )?(?:u\.?s\.?|united states|uk|canadian|eu) citizens?(?:hip)?|citizens? of)\b|"
+    r"\b(?:(?:a )?(?:u\.?s\.?|united states|uk|canadian|eu) (?:citizens?(?:hip)?|persons?)|citizens? of)\b|"
     r"\b(?:u\.?s\.?|united states) citizenship (?:is )?required\b|"
-    r"\b(?:active |current )?(?:security|ts/sci|secret) clearance (?:is )?required\b",
+    r"\b(?:active |current )?(?:security|ts/sci|secret|top secret) clearance (?:is )?required\b|"
+    r"\b(?:eligible|able) to obtain (?:and maintain )?(?:a |an )?(?:u\.?s\.? )?(?:security |secret |top secret )?clearance\b|"
+    r"\bu\.?s\.? persons? (?:as defined|under) (?:by )?(?:itar|ear)\b",
     _I,
 )
 
 EXISTING_AUTH = re.compile(
     r"\b(?:must|should|need to|required to) (?:be |have )?(?:legally |currently )?"
-    r"(?:authori[sz]ed|eligible|permitted|able) to work in\b|"
+    r"(?:authori[sz]ed|eligible|permitted|legally able) to work in (?:the )?(?:U\.?S\.?A?\b|UK\b|EU\b|[A-Z][a-z]+)|"
     r"\b(?:must|should) have (?:the )?(?:legal )?right to work in\b|"
     r"\bvalid work (?:authori[sz]ation|permit) (?:in|for)\b",
     _I,
 )
 
-RELOC_NOT_OFFERED = re.compile(
-    r"\b(?:no|not|unable to (?:offer|provide)|do not (?:offer|provide)|does not (?:offer|provide)|"
-    r"cannot (?:offer|provide))\b[^.;]{0,20}\brelocation\b(?: (?:assistance|support|package))?",
-    _I,
-)
+RELOC_NOT_OFFERED = [
+    re.compile(r"\b(?:no|not|unable to (?:offer|provide)|do not (?:offer|provide)|does not (?:offer|provide)|"
+               r"cannot (?:offer|provide)|don't (?:offer|provide))\b[^.;]{0,20}\brelocation\b", _I),
+    re.compile(r"\brelocation (?:assistance |support |package |benefits? )?(?:is |are )?(?:not|n't|unavailable|isn't)\b", _I),
+    re.compile(r"\brelocation[^.;]{0,25}\b(?:not (?:available|offered|provided|covered)|unavailable|isn't (?:available|offered))\b", _I),
+]
 RELOC_ASSIST = [
     re.compile(r"\brelocation (?:assistance|support|package|stipend|bonus|reimbursement|benefits?)\b", _I),
     re.compile(r"\b(?:help|assist|support)s? (?:you )?(?:with )?relocat\w+\b", _I),
@@ -146,6 +172,7 @@ RELOC_REQUIRED = [
     re.compile(r"\b(?:must|will need to|required to|willing to|open to|able to|need to) relocate\b", _I),
     re.compile(r"\brelocation (?:to [A-Z][\w .]+ )?(?:is )?required\b", _I),
 ]
+RELOC_NEGATED = re.compile(r"\b(?:not|no|never|don't|doesn't|won't|isn't)\b[^.;]{0,25}\brelocat|n't\b[^.;]{0,25}\brelocat|\?", _I)
 
 DAYS_IN_OFFICE = re.compile(
     r"\b(?:in[- ]?person|in[- ]office|in the office|on[- ]?site|onsite|in office)\b[^.;]{0,40}?"
@@ -176,7 +203,8 @@ REMOTE = [
     re.compile(r"\b(?:fully|100%|completely) remote\b", _I),
     re.compile(r"\bremote[- ](?:first|friendly)\b", _I),
     re.compile(r"\bwork from anywhere\b", _I),
-    re.compile(r"\b(?:this|the) (?:role|position) is (?:a )?remote\b", _I),
+    re.compile(r"\b(?:this|the) (?:role|position|job) is (?:a )?(?:fully )?remote\b", _I),
+    re.compile(r"\bthis is a (?:fully )?remote (?:role|position|job)\b", _I),
     re.compile(r"\bopen to remote\b", _I),
 ]
 
@@ -184,10 +212,10 @@ GEO_LOCATED = re.compile(
     r"\b(?:must|should|need to|required to) (?:be )?(?:located|based|reside|residing|live|living) "
     r"(?:with)?in (?:the )?([A-Z][A-Za-z.]+(?: [A-Z][A-Za-z.]+){0,3})",
 )
+_REGION_ALT = r"US|U\.S\.|USA|United States|Canada|UK|EU|Europe|LATAM|EMEA|APAC|North America|Latin America"
 GEO_ONLY = re.compile(
-    r"\b(US|U\.S\.|USA|United States|Canada|UK|EU|Europe|LATAM|EMEA|APAC|North America)[- ]only\b"
-    r"|\b(?:remote|open to candidates|candidates) (?:with)?in (?:the )?"
-    r"(US|U\.S\.|USA|United States|Canada|UK|EU|Europe|LATAM|EMEA|APAC|North America|Latin America)\b",
+    rf"\b({_REGION_ALT})[- ]only\b"
+    rf"|\b(?:remote|open to candidates|candidates) (?:with)?in (?:the )?({_REGION_ALT})\b(?:,? (?:or|and) (?:the )?({_REGION_ALT})\b)?",
 )
 TIMEZONE = re.compile(
     r"\b(?:GMT|UTC)\s?[+-−]\s?\d{1,2}\b[^.;]{0,30}?\b(?:GMT|UTC)\s?[+-−]\s?\d{1,2}\b|"
@@ -198,7 +226,7 @@ TIMEZONE = re.compile(
 )
 
 EMPLOYMENT = [
-    ("internship", re.compile(r"\b(?:this is an? |paid )?internship\b", _I)),
+    ("internship", re.compile(r"\b(?:this is an? (?:paid )?internship|paid internship|\d+[- ](?:week|month) internship|internship (?:role|position) (?:is|for))\b", _I)),
     ("contract", re.compile(r"\b(?:contract(?:or)? (?:role|position)|(?:\d+|six|three|twelve)[- ]month contract|contract-to-hire)\b", _I)),
     ("part_time", re.compile(r"\bpart[- ]time (?:role|position)\b", _I)),
     ("full_time", re.compile(r"\bfull[- ]time (?:role|position|employee|employment|job)\b", _I)),
@@ -216,7 +244,7 @@ _META_EMPLOYMENT = {
 # Canonical skill -> regex alternatives. Word-bounded, case-insensitive.
 SKILLS: dict[str, str] = {
     "Python": r"python", "TypeScript": r"typescript", "JavaScript": r"javascript",
-    "Go": r"golang|go(?= ?(?:,|/|\)| and | or )|\s+services|\s+backend)", "Rust": r"rust",
+    "Go": r"golang|go(?= ?(?:,|/|\)| and | or )|\s+services|\s+backend)", "Rust": r"rust(?! belt)",
     "Java": r"java(?!script)", "Kotlin": r"kotlin", "Swift": r"swift", "C++": r"c\+\+",
     "C#": r"c#", "Ruby": r"ruby", "Rails": r"rails|ruby on rails", "PHP": r"php", "Scala": r"scala",
     "Elixir": r"elixir", "SQL": r"sql", "React": r"react(?:\.js|js)?(?! native)",
@@ -234,9 +262,80 @@ SKILLS: dict[str, str] = {
     "Figma": r"figma", "iOS": r"ios", "Android": r"android", "Tailwind": r"tailwind",
     "Solidity": r"solidity", "Distributed systems": r"distributed systems",
     "Embedded": r"embedded (?:systems|software|c)", "Robotics": r"robotics", "ROS": r"\bros2?\b",
-    "Unity": r"unity", "Unreal": r"unreal", "WebGL": r"webgl", "HTML/CSS": r"html|css",
+    "Unity": r"unity(?= ?(?:3d|engine|game|developer|,|/| and | or |\)))","Unreal": r"unreal", "WebGL": r"webgl", "HTML/CSS": r"html|css",
 }
 _SKILL_RES = {name: re.compile(rf"(?<![\w+#.])(?:{pat})(?![\w+#])", _I) for name, pat in SKILLS.items()}
+
+
+# ---------------------------------------------------------------------------
+# Sentence classifiers (also reused by the validator on full sentences)
+# ---------------------------------------------------------------------------
+
+
+def classify_sponsorship(sentence: str) -> list[tuple[str, re.Match[str]]]:
+    """Return sponsorship values stated by one sentence, with the matching span.
+
+    Works clause by clause so "We sponsor O-1 visas, but cannot sponsor green
+    cards" yields both 'offered' and 'not_offered' (-> needs clarification),
+    and any negation in a clause blocks a positive reading of that clause.
+    """
+    out: list[tuple[str, re.Match[str]]] = []
+    seen: set[str] = set()
+
+    def add(v: str, m: re.Match[str]) -> None:
+        if v not in seen:
+            seen.add(v)
+            out.append((v, m))
+
+    label = SPONSOR_LABEL.search(sentence)
+    if label:
+        add("not_offered" if label.group(1).lower() in ("no", "not available", "unavailable") else "offered", label)
+
+    has_immigration = bool(IMMIGRATION_TERM.search(sentence))
+    if has_immigration or label:
+        for clause in CLAUSE_SPLIT.split(sentence):
+            if not clause or not (SPONSOR_WORD.search(clause) or re.search(r"\bget you a visa\b", clause, _I)):
+                continue
+            unhedged = HEDGE.sub(" ", clause)
+            neg = next((m for p in SPONSOR_NEG if (m := p.search(unhedged))), None)
+            if neg is None and has_negation(clause):
+                neg = NEGATION.search(unhedged)
+            if neg is not None:
+                m = re.search(re.escape(clause), sentence) or neg
+                add("not_offered", m)
+                continue
+            case = next((m for p in SPONSOR_CASE if (m := p.search(clause))), None)
+            if case is not None:
+                add("case_by_case", re.search(re.escape(clause), sentence) or case)
+                continue
+            pos = next((m for p in SPONSOR_POS if (m := p.search(clause))), None)
+            if pos is not None:
+                add("offered", re.search(re.escape(clause), sentence) or pos)
+
+    m = CITIZENSHIP.search(sentence)
+    if m:
+        add("citizenship_required", m)
+    elif not out:
+        m = EXISTING_AUTH.search(sentence)
+        if m:
+            add("existing_authorization_required", m)
+    return out
+
+
+def classify_relocation(sentence: str) -> list[tuple[str, re.Match[str]]]:
+    out: list[tuple[str, re.Match[str]]] = []
+    m = next((m for p in RELOC_NOT_OFFERED if (m := p.search(sentence))), None)
+    if m:
+        out.append(("not_offered", m))
+    else:
+        m = next((m for p in RELOC_ASSIST if (m := p.search(sentence))), None)
+        if m:
+            out.append(("assistance_offered", m))
+    if not RELOC_NEGATED.search(sentence):
+        m = next((m for p in RELOC_REQUIRED if (m := p.search(sentence))), None)
+        if m:
+            out.append(("required", m))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -312,52 +411,15 @@ def extract_description(text: str, b: _Builder | None = None) -> list[Claim]:
     for seg in segments(text):
         s = seg.text
 
-        # --- sponsorship (negation first) ---
-        handled_sponsor = False
-        if IMMIGRATION_CONTEXT.search(s) or re.search(r"\bsponsor", s, _I):
-            for pat in SPONSOR_NEG:
-                m = pat.search(s)
-                if m and IMMIGRATION_CONTEXT.search(s):
-                    b.add(ClaimCategory.sponsorship_policy, "not_offered", _clip(s, m), "description", 0.9, "rules")
-                    handled_sponsor = True
-                    break
-            if not handled_sponsor:
-                for pat in SPONSOR_CASE:
-                    m = pat.search(s)
-                    if m and IMMIGRATION_CONTEXT.search(s):
-                        b.add(ClaimCategory.sponsorship_policy, "case_by_case", _clip(s, m), "description", 0.8, "rules")
-                        handled_sponsor = True
-                        break
-            if not handled_sponsor:
-                for pat in SPONSOR_POS:
-                    m = pat.search(s)
-                    if m and IMMIGRATION_CONTEXT.search(s):
-                        b.add(ClaimCategory.sponsorship_policy, "offered", _clip(s, m), "description", 0.85, "rules")
-                        handled_sponsor = True
-                        break
-        m = CITIZENSHIP.search(s)
-        if m:
-            b.add(ClaimCategory.sponsorship_policy, "citizenship_required", _clip(s, m), "description", 0.85, "rules")
-        elif not handled_sponsor:
-            m = EXISTING_AUTH.search(s)
-            if m:
-                b.add(ClaimCategory.sponsorship_policy, "existing_authorization_required", _clip(s, m), "description", 0.8, "rules")
+        # --- sponsorship ---
+        for value, m in classify_sponsorship(s):
+            conf = {"not_offered": 0.9, "offered": 0.85, "case_by_case": 0.8,
+                    "citizenship_required": 0.85, "existing_authorization_required": 0.8}[value]
+            b.add(ClaimCategory.sponsorship_policy, value, _clip(s, m), "description", conf, "rules")
 
         # --- relocation ---
-        m = RELOC_NOT_OFFERED.search(s)
-        if m:
-            b.add(ClaimCategory.relocation_requirement, "not_offered", _clip(s, m), "description", 0.85, "rules")
-        else:
-            for pat in RELOC_ASSIST:
-                m = pat.search(s)
-                if m:
-                    b.add(ClaimCategory.relocation_requirement, "assistance_offered", _clip(s, m), "description", 0.85, "rules")
-                    break
-        for pat in RELOC_REQUIRED:
-            m = pat.search(s)
-            if m:
-                b.add(ClaimCategory.relocation_requirement, "required", _clip(s, m), "description", 0.8, "rules")
-                break
+        for value, m in classify_relocation(s):
+            b.add(ClaimCategory.relocation_requirement, value, _clip(s, m), "description", 0.85 if value != "required" else 0.8, "rules")
 
         # --- work arrangement ---
         m = DAYS_IN_OFFICE.search(s)
@@ -388,10 +450,10 @@ def extract_description(text: str, b: _Builder | None = None) -> list[Claim]:
                 b.add(ClaimCategory.geographic_restriction, region, _clip(s, m), "description", 0.8, "rules")
         m = GEO_ONLY.search(s)
         if m:
-            raw = m.group(1) or m.group(2)
-            region = canonical_region(raw)
-            if region:
-                b.add(ClaimCategory.geographic_restriction, region, _clip(s, m), "description", 0.8, "rules")
+            for raw in filter(None, m.groups()):
+                region = canonical_region(raw)
+                if region:
+                    b.add(ClaimCategory.geographic_restriction, region, _clip(s, m), "description", 0.8, "rules")
         m = TIMEZONE.search(s)
         if m:
             b.add(ClaimCategory.geographic_restriction, f"Time zone: {m.group(0).strip()}", _clip(s, m), "description", 0.7, "rules")
