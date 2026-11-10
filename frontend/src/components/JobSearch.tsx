@@ -51,6 +51,16 @@ export function JobSearch({
   const [data, setData] = useState<JobListResponse | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState<string>("");
+  // Show a cold-start hint if the initial load takes unusually long.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (status !== "loading") {
+      setSlow(false);
+      return;
+    }
+    const t = setTimeout(() => setSlow(true), 6000);
+    return () => clearTimeout(t);
+  }, [status]);
   const debouncedQuery = useDebounce(query, debounceMs);
   const moreController = useRef<AbortController | null>(null);
 
@@ -165,6 +175,11 @@ export function JobSearch({
       <div className="mt-2">
         {status === "loading" && (
           <div className="space-y-2" data-testid="job-skeletons">
+            {slow && (
+              <p className="text-ink-2 text-[12.5px]" role="status">
+                Waking up the demo server. The first request can take up to a minute on the free tier.
+              </p>
+            )}
             <JobCardSkeleton />
             <JobCardSkeleton />
             <JobCardSkeleton />

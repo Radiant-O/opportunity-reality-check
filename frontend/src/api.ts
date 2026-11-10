@@ -12,7 +12,8 @@ export const API_BASE_URL: string = (
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
 
-export const REQUEST_TIMEOUT_MS = 30_000;
+// Generous: free-tier hosts (e.g. Render) can take ~50s to wake from sleep.
+export const REQUEST_TIMEOUT_MS = 75_000;
 
 /** Typed error for every failed request. `status` is 0 for network errors and 408 for client timeouts. */
 export class ApiError extends Error {
