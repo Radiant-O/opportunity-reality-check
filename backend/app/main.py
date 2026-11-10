@@ -133,7 +133,7 @@ def create_app(
         if not limiter.allow(_client_key(request)):
             raise HTTPException(status_code=429, detail="Too many requests. Please wait a minute and try again.")
 
-    @app.get("/health")
+    @app.api_route("/health", methods=["GET", "HEAD"])
     async def health():
         return {
             "status": "ok",
