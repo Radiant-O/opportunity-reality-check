@@ -19,6 +19,10 @@ def test_health(client):
     assert r.status_code == 200 and r.json()["llm_extraction"] == "disabled"
 
 
+def test_health_head_for_uptime_monitors(client):
+    assert client.head("/health").status_code == 200
+
+
 def test_list_jobs(client):
     r = client.get("/api/jobs", params={"q": "engineer"})
     assert r.status_code == 200
