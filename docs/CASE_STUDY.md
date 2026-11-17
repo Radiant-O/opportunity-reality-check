@@ -58,7 +58,7 @@ I haven't run user tests. No user numbers are claimed here. The plan:
 
 **Founder task:** run Listing Clarity Check on one of their own listings. Ask whether the gaps are accurate, and whether they would edit the listing.
 
-**Extraction quality:** have someone other than the rules' author label 50 random live listings, then report per-category precision and recall and the unsupported-claim rate for the deterministic and LLM paths separately. The current 16-case eval set is a regression gate, not an accuracy estimate.
+**Extraction quality:** have someone other than the rules' author label 50 random live listings, then report per-category precision and recall and the unsupported-claim rate for the deterministic and LLM paths separately. The current 20-case eval set is a regression gate, not an accuracy estimate.
 
 ## What I'd do next
 

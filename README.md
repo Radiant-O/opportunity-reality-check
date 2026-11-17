@@ -9,6 +9,7 @@
 | **Live demo** | **https://reality-check.radiantx.workers.dev** |
 | **API** | https://opportunity-reality-check.onrender.com/health (interactive docs at [`/docs`](https://opportunity-reality-check.onrender.com/docs)) |
 | **Demo video** | [`docs/demo/walkthrough.webm`](docs/demo/walkthrough.webm) |
+| **Engineering case study** | [`docs/ENGINEERING_CASE_STUDY.md`](docs/ENGINEERING_CASE_STUDY.md): architecture, engine, diagrams |
 
 ![Analysis of a live speedrun listing](docs/demo/analysis-live.png)
 
